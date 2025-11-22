@@ -26,7 +26,7 @@ from .api import NeteaseLyricsView
 _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_lyrics_card(hass: HomeAssistant) -> bool:
-    state_lyrics_card_path = '/netease_lyrics-local'
+    state_lyrics_card_path = '/ha_cloud_music-local'
     await hass.http.async_register_static_paths([
         StaticPathConfig(state_lyrics_card_path, hass.config.path('custom_components/ha_cloud_music/www'), False)
     ])
