@@ -7,7 +7,7 @@
     "config_flow": true,
     "codeowners": ["@xiaoshi930"],
     "requirements": ["aiohttp"],
-    "version": "1.1",
+    "version": "1.2",
     "iot_class": "ha_cloud_music"
   }
  
