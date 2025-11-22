@@ -28,9 +28,9 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_lyrics_card(hass: HomeAssistant) -> bool:
     state_lyrics_card_path = '/netease_lyrics-local'
     await hass.http.async_register_static_paths([
-        StaticPathConfig(state_lyrics_card_path, hass.config.path('custom_components/music-player/www'), False)
+        StaticPathConfig(state_lyrics_card_path, hass.config.path('custom_components/ha_cloud_music/www'), False)
     ])
-    _LOGGER.debug(f"register_static_path: {state_lyrics_card_path + ':custom_components/music-player/www'}")
+    _LOGGER.debug(f"register_static_path: {state_lyrics_card_path + ':custom_components/ha_cloud_music/www'}")
     add_extra_js_url(hass, state_lyrics_card_path + f"/music-player-card.js")
     return True
   
