@@ -1,4 +1,4 @@
-console.info("%c 音乐播放器 \n%c   v 1.0   ", "color: red; font-weight: bold; background: black", "color: white; font-weight: bold; background: dimgray");
+console.info("%c 音乐播放器 \n%c   v 1.1   ", "color: red; font-weight: bold; background: black", "color: white; font-weight: bold; background: dimgray");
 import { LitElement, html, css } from "https://unpkg.com/lit-element@2.4.0/lit-element.js?module";
 
 class MusicPlayerEditor extends LitElement {
@@ -86,17 +86,62 @@ class MusicPlayerEditor extends LitElement {
             <option value="off">深色主题（深灰底白字）</option>
           </select>
         </div>
+        
+        <div class="form-group">
+          <label>卡片宽度：支持像素(px)和百分比(%)</label>
+          <input 
+            type="text" 
+            @change=${this._entityChanged}
+            .value=${this.config.width !== undefined ? this.config.width : '100%'}
+            name="width"
+            placeholder="默认100%"
+          />
+        </div>
+        
+        <div class="form-group">
+          <label>卡片高度：排除歌词区域的高度，支持像素(px)和百分比(%)</label>
+          <input 
+            type="text" 
+            @change=${this._entityChanged}
+            .value=${this.config.height !== undefined ? this.config.height : '80px'}
+            name="height"
+            placeholder="默认80px"
+          />
+        </div>
+        
+        <div class="form-group">
+          <label>歌词高度：歌词区域的高度，支持像素(px)和百分比(%)</label>
+          <input 
+            type="text" 
+            @change=${this._entityChanged}
+            .value=${this.config.lyrics_height !== undefined ? this.config.lyrics_height : '220px'}
+            name="lyrics_height"
+            placeholder="默认220px"
+          />
+        </div>
       </div>
     `;
   }
 
   _entityChanged(e) {
     const { name, value } = e.target;
-    if (!value && name !== 'theme') return;
+    if (!value && name !== 'theme' && name !== 'width' && name !== 'height' && name !== 'lyrics_height') return;
+    
+    // 对于width字段，如果为空则使用默认值100%
+    // 对于height字段，如果为空则使用默认值80px
+    // 对于lyrics_height字段，如果为空则使用默认值220px
+    let finalValue = value;
+    if (name === 'width') {
+      finalValue = value || '100%';
+    } else if (name === 'height') {
+      finalValue = value || '80px';
+    } else if (name === 'lyrics_height') {
+      finalValue = value || '220px';
+    }
     
     this.config = {
       ...this.config,
-      [name]: value
+      [name]: finalValue
     };
     
     this.dispatchEvent(new CustomEvent('config-changed', {
@@ -147,6 +192,21 @@ window.customCardEditors["music-player"] = {
           default: "on",
           enum: ["on", "off"],
           enumNames: ["浅色主题（白底黑字）", "深色主题（深灰底白字）"]
+        },
+        width: {
+          title: "宽度",
+          type: "string",
+          default: "100%"
+        },
+        height: {
+          title: "高度",
+          type: "string",
+          default: "80px"
+        },
+        lyrics_height: {
+          title: "歌词高度",
+          type: "string",
+          default: "220px"
         }
       }
     }
@@ -165,6 +225,9 @@ class MusicPlayer extends LitElement {
       volumeState: { type: Number },
       isPlaying: { type: Boolean },
       theme: { type: String },
+      width: { type: String },
+      height: { type: String },
+      lyricsHeight: { type: String },
       showLyrics: { type: Boolean },
       lyrics: { type: Array },
       currentLyricIndex: { type: Number },
@@ -675,6 +738,9 @@ class MusicPlayer extends LitElement {
     this.isDragging = false;
     this.localVolumeUpdate = false;
     this.theme = 'on';
+    this.width = '100%';
+    this.height = '80px';
+    this.lyricsHeight = '220px';
     this.showLyrics = false;
     this.lyrics = [];
     this.currentLyricIndex = -1;
@@ -738,6 +804,9 @@ class MusicPlayer extends LitElement {
       xiaomi_home: config.xiaomi_home,
       xiaomi_miot: config.xiaomi_miot,
       theme: config.theme,
+      width: config.width,
+      height: config.height,
+      lyrics_height: config.lyrics_height,
       ...config
     };
     
@@ -746,8 +815,26 @@ class MusicPlayer extends LitElement {
       this._config.theme = 'on';
     }
     
+    // 确保width有默认值
+    if (this._config.width === undefined) {
+      this._config.width = '100%';
+    }
+    
+    // 确保height有默认值
+    if (this._config.height === undefined) {
+      this._config.height = '80px';
+    }
+    
+    // 确保lyrics_height有默认值
+    if (this._config.lyrics_height === undefined) {
+      this._config.lyrics_height = '220px';
+    }
+    
     this.xiaomiHomeEntity = this._config.xiaomi_home;
     this.xiaomiMiotEntity = this._config.xiaomi_miot;
+    this.width = this._config.width;
+    this.height = this._config.height;
+    this.lyricsHeight = this._config.lyrics_height;
     
     // 触发重新渲染以应用主题更改
     this.requestUpdate();
@@ -843,7 +930,10 @@ class MusicPlayer extends LitElement {
     return {
       xiaomi_home: "media_player.xiaomi_home",
       xiaomi_miot: "media_player.xiaomi_speaker",
-      theme: "on"
+      theme: "on",
+      width: "100%",
+      height: "80px",
+      lyrics_height: "220px"
     };
   }
 
@@ -1656,22 +1746,45 @@ class MusicPlayer extends LitElement {
           --bg-color: ${bgColor};
           ${entityPicture ? '' : 'background: var(--bg-color);'};
           position: relative;
+          width: ${this.width};
+          min-width: ${this.width};
+          max-width: ${this.width};
         }
 
         .player-grid {
           padding: 10px 0;
-          grid-template-rows: ${this.showLyrics ? '25px 25px 25px 220px 5px' : '25px 25px 25px 5px'};
-          grid-template-areas: ${this.showLyrics ?  
-            `"icon name name name name name name . power"
+          height: ${this.height};
+          min-height: ${this.height};
+          max-height: ${this.height};
+          grid-template-rows: ${this.showLyrics ? '33% 33% 33%' : '33% 33% 33%'};
+          grid-template-areas: 
+            "icon name name name name name name . power"
             "icon info info info info info info lyrics-button lyrics-button"
-            "icon volume volume-down volume-slider volume-up prev play pause next"
-            "lyrics lyrics lyrics lyrics lyrics lyrics lyrics lyrics lyrics"
-            "progress progress progress progress progress progress progress progress progress"` 
-            :
-            `"icon name name name name name name . power"
-            "icon info info info info info info lyrics-button lyrics-button"
-            "icon volume volume-down volume-slider volume-up prev play pause next"
-            "progress progress progress progress progress progress progress progress progress"`};
+            "icon volume volume-down volume-slider volume-up prev play pause next";
+        }
+
+        .lyrics-area {
+          display: flex;
+          align-items: stretch;
+          justify-content: center;
+          padding: 0;
+          overflow: hidden;
+          position: relative;
+          height: ${this.lyricsHeight};
+          width: 100%;
+        }
+
+        .lyrics-area:empty {
+          display: none;
+        }
+
+        .progress-area {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0;
+          height: 5px;
+          width: 100%;
         }
       
       .background-layer {
@@ -1785,56 +1898,56 @@ class MusicPlayer extends LitElement {
         <button class="control-button lyrics-button" @click=${this.handleLyricsToggle}>
           ${this.showLyrics ? '关闭歌词' : '打开歌词'}
         </button>
+      </div>
 
-        <!-- 歌词区域 -->
+      <!-- 歌词区域 (独立于主网格) -->
+      ${this.showLyrics ? html`
         <div class="lyrics-area">
-          ${this.showLyrics ? html`
-            <!-- 歌词容器 -->
-            <div class="lyrics-container">
-              <div class="lyrics-top-spacer"></div>
-              ${this.lyrics.length > 0 ? this.lyrics.map((lyric, index) => html`
-                <div 
-                  class="lyric ${index === this.currentLyricIndex ? 'active' : ''}"
-                  style="${index === this.currentLyricIndex ? `--progress: ${this.lyricProgress * 100}%;` : ''}"
-                >
-                  ${lyric.text}
-                </div>
-              `) : html`
-                <div class="lyric">暂无歌词</div>
-              `}
-              <div class="lyrics-spacer"></div>
-            </div>
-            
-            <!-- 歌词控制按钮 -->
-            <div class="lyrics-controls">
-              <button class="lyrics-control-btn" @click=${this.handleLyricsTimeDecrease} title="歌词进度减1秒">
-                <ha-icon icon="mdi:minus"></ha-icon>
-              </button>
-              <button class="lyrics-control-btn" @click=${this.handleLyricsTimeReset} title="重置歌词进度">
-                <ha-icon icon="mdi:restart"></ha-icon>
-              </button>
-              <button class="lyrics-control-btn" @click=${this.handleLyricsTimeIncrease} title="歌词进度加1秒">
-                <ha-icon icon="mdi:plus"></ha-icon>
-              </button>
-              
-              <!-- 歌词调整弹窗 -->
+          <!-- 歌词容器 -->
+          <div class="lyrics-container">
+            <div class="lyrics-top-spacer"></div>
+            ${this.lyrics.length > 0 ? this.lyrics.map((lyric, index) => html`
               <div 
-                class="lyrics-adjustment-toast ${this.adjustmentToast.show ? 'show' : ''}"
-                id="lyrics-toast"
+                class="lyric ${index === this.currentLyricIndex ? 'active' : ''}"
+                style="${index === this.currentLyricIndex ? `--progress: ${this.lyricProgress * 100}%;` : ''}"
               >
-                ${this.adjustmentToast.message}
+                ${lyric.text}
               </div>
+            `) : html`
+              <div class="lyric">暂无歌词</div>
+            `}
+            <div class="lyrics-spacer"></div>
+          </div>
+          
+          <!-- 歌词控制按钮 -->
+          <div class="lyrics-controls">
+            <button class="lyrics-control-btn" @click=${this.handleLyricsTimeDecrease} title="歌词进度减1秒">
+              <ha-icon icon="mdi:minus"></ha-icon>
+            </button>
+            <button class="lyrics-control-btn" @click=${this.handleLyricsTimeReset} title="重置歌词进度">
+              <ha-icon icon="mdi:restart"></ha-icon>
+            </button>
+            <button class="lyrics-control-btn" @click=${this.handleLyricsTimeIncrease} title="歌词进度加1秒">
+              <ha-icon icon="mdi:plus"></ha-icon>
+            </button>
+            
+            <!-- 歌词调整弹窗 -->
+            <div 
+              class="lyrics-adjustment-toast ${this.adjustmentToast.show ? 'show' : ''}"
+              id="lyrics-toast"
+            >
+              ${this.adjustmentToast.message}
             </div>
-          ` : ''}
+          </div>
         </div>
+      ` : ''}
 
-        <!-- 进度条 -->
-        <div class="progress-area">
-          <div 
-            class="progress-bar"
-            style="--progress-percentage: ${progressPercentage}%"
-          ></div>
-        </div>
+      <!-- 进度条 (独立于主网格) -->
+      <div class="progress-area">
+        <div 
+          class="progress-bar"
+          style="--progress-percentage: ${progressPercentage}%"
+        ></div>
       </div>
     `;
   }
@@ -1847,5 +1960,5 @@ window.customCards.push({
   name: "音乐播放器",
   description: "一个功能完整的音乐播放器控制卡片",
   preview: true,
-  documentationURL: "https://github.com/xiaoshi930/netease_lyrics"
+  documentationURL: "https://github.com/xiaoshi930/music_player"
 });
