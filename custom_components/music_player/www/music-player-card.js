@@ -1,4 +1,4 @@
-console.info("%c 音乐播放器 \n%c   v 1.2   ", "color: red; font-weight: bold; background: black", "color: white; font-weight: bold; background: dimgray");
+console.info("%c 音乐播放器 \n%c   v 2.0   ", "color: red; font-weight: bold; background: black", "color: white; font-weight: bold; background: black");
 import { LitElement, html, css } from "https://unpkg.com/lit-element@2.4.0/lit-element.js?module";
 
 class MusicPlayerEditor extends LitElement {
@@ -155,14 +155,15 @@ class MusicPlayerEditor extends LitElement {
     this.config = config;
   }
 }
-customElements.define('music-player-editor', MusicPlayerEditor);
+
+customElements.define('xiaoshi-music-player-editor', MusicPlayerEditor);
 
 window.customCardEditors = window.customCardEditors || {};
-window.customCardEditors["music-player"] = {
+window.customCardEditors["xiaoshi-music-player"] = {
   config: {
     name: "音乐播放器",
     description: "一个功能完整的音乐播放器控制卡片",
-    tag: "music-player",
+    tag: "xiaoshi-music-player",
     image: "/static/images/dummy.png",
     docs: "https://github.com/xiaoshi930/netease_lyrics",
     config_schema: {
@@ -923,7 +924,7 @@ class MusicPlayer extends LitElement {
   }
 
   static getConfigElement() {
-    return document.createElement("music-player-editor");
+    return document.createElement("xiaoshi-music-player-editor");
   }
 
   static getStubConfig() {
@@ -1952,11 +1953,11 @@ class MusicPlayer extends LitElement {
     `;
   }
 }
-customElements.define('music-player', MusicPlayer);
-
+customElements.define('xiaoshi-music-player', MusicPlayer);
+ 
 window.customCards = window.customCards || [];
 window.customCards.push({
-  type: "music-player",
+  type: "xiaoshi-music-player",
   name: "音乐播放器",
   description: "一个功能完整的音乐播放器控制卡片",
   preview: true,
