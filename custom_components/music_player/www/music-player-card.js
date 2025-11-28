@@ -353,18 +353,8 @@ class MusicPlayer extends LitElement {
         padding: 0;
       }
 
-      .control-button {
-        background: rgba(0, 0, 0, 0); 
-        border-radius: 12px;
-      }
-
-      .control-button:hover {
-        background: rgba(255, 255, 255, 0.2);
-        border-radius: 12px !important;
-      }
-
       .control-button:active {
-        background: var(--fg-color, rgb(255, 255, 255, 0.2));
+        background: rgba(255, 255, 255, 0.2);
         border-radius: 12px !important;
       }
 
@@ -648,10 +638,6 @@ class MusicPlayer extends LitElement {
       }
     `;
   }
-
-  _handleClick() {
-    navigator.vibrate(50);
- }
 
   _initLyricsCache() {
     try {
@@ -962,8 +948,19 @@ class MusicPlayer extends LitElement {
     }
   }
 
+  handleClick(){
+    if (navigator.vibrate) {
+      navigator.vibrate(50);
+    }
+    else if (navigator.webkitVibrate) {
+        navigator.webkitVibrate(50); 
+    }
+    else {
+    }
+  }
+
   handlePower() {
-    navigator.vibrate(50);
+    this.handleClick();
     const targetEntity = this.xiaomiHomeEntity || this.xiaomiMiotEntity;
     this.callService('media_player.media_pause', {
       entity_id: targetEntity
@@ -971,9 +968,8 @@ class MusicPlayer extends LitElement {
   }
 
   handleVolumeDown() {
+    this.handleClick();
     const newVolume = Math.max(0, this.volumeState - 1);
-    
-    navigator.vibrate(30);
     
     this.updateVolume(newVolume);
     
@@ -994,9 +990,8 @@ class MusicPlayer extends LitElement {
   }
 
   handleVolumeUp() {
+    this.handleClick();
     const newVolume = Math.min(100, this.volumeState + 1);
-    
-    navigator.vibrate(30);
     
     this.updateVolume(newVolume);
     
@@ -1017,7 +1012,7 @@ class MusicPlayer extends LitElement {
   }
 
   handleLyricsToggle() {
-    navigator.vibrate(30);
+    this.handleClick();
     this.showLyrics = !this.showLyrics;
     
     // 打开歌词时，重新获取实体中的当前进度
@@ -1046,7 +1041,7 @@ class MusicPlayer extends LitElement {
 
   // 歌词进度调整方法
   handleLyricsTimeDecrease() {
-    navigator.vibrate(20);
+    this.handleClick();
     // 减少歌词进度1秒
     this.smoothCurrentTime = Math.max(0, this.smoothCurrentTime - 1000);
     this.lastUpdateTime = Date.now();
@@ -1062,7 +1057,7 @@ class MusicPlayer extends LitElement {
   }
 
   handleLyricsTimeIncrease() {
-    navigator.vibrate(20);
+    this.handleClick();
     // 增加歌词进度1秒
     this.smoothCurrentTime = this.smoothCurrentTime + 1000;
     this.lastUpdateTime = Date.now();
@@ -1078,7 +1073,7 @@ class MusicPlayer extends LitElement {
   }
 
   handleLyricsTimeReset() {
-    navigator.vibrate(30);
+    this.handleClick();
     // 重新从实体获取当前进度
     this.initSmoothTimeOnce();
     // 重置总调节时间
@@ -1139,8 +1134,6 @@ class MusicPlayer extends LitElement {
         }
       }
     }
-
-    console.log("最终歌曲信息:", { title, artist, sourceEntity });
 
     if (!title || !artist) {
       this.loadNoLyrics();
@@ -1571,7 +1564,7 @@ class MusicPlayer extends LitElement {
     // 防抖动：停止拖动后300ms才调用服务
     this.volumeDebounceTimer = setTimeout(() => {
       // 震动反馈
-      navigator.vibrate(30);
+    this.handleClick();
       
       // 同时设置主实体和备用实体音量
       if (this.xiaomiHomeEntity) {
@@ -1610,7 +1603,7 @@ class MusicPlayer extends LitElement {
       }
       
       // 震动反馈
-      navigator.vibrate(30);
+      this.handleClick();
       
       // 同时设置主实体和备用实体音量
       if (this.xiaomiHomeEntity) {
@@ -1629,10 +1622,8 @@ class MusicPlayer extends LitElement {
     }
   }
 
-
-
   handlePrevious() {
-    navigator.vibrate(50);
+    this.handleClick();
     const targetEntity = this.xiaomiHomeEntity || this.xiaomiMiotEntity;
     this.callService('media_player.media_previous_track', {
       entity_id: targetEntity
@@ -1640,7 +1631,7 @@ class MusicPlayer extends LitElement {
   }
 
   handlePlayPause() {
-    navigator.vibrate(50);
+    this.handleClick();
     const targetEntity = this.xiaomiHomeEntity || this.xiaomiMiotEntity;
     this.callService('media_player.media_play_pause', {
       entity_id: targetEntity
@@ -1648,7 +1639,7 @@ class MusicPlayer extends LitElement {
   }
 
   handlePause() {
-    navigator.vibrate(50);
+    this.handleClick();
     const targetEntity = this.xiaomiHomeEntity || this.xiaomiMiotEntity;
     this.callService('media_player.media_pause', {
       entity_id: targetEntity
@@ -1656,14 +1647,12 @@ class MusicPlayer extends LitElement {
   }
 
   handleNext() {
-    navigator.vibrate(50);
+    this.handleClick();
     const targetEntity = this.xiaomiHomeEntity || this.xiaomiMiotEntity;
     this.callService('media_player.media_next_track', {
       entity_id: targetEntity
     });
   }
-
-
 
   getProgressPercentage() {
     // 检查主实体是否有进度数据，如果没有则使用备用实体
