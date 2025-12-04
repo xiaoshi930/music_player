@@ -114,10 +114,22 @@ class MusicPlayerEditor extends LitElement {
           <input 
             type="text" 
             @change=${this._entityChanged}
-            .value=${this.config.lyrics_height !== undefined ? this.config.lyrics_height : '220px'}
+            .value=${this.config.lyrics_height !== undefined ? this.config.lyrics_height : '200px'}
             name="lyrics_height"
-            placeholder="默认220px"
+            placeholder="默认200px"
           />
+        </div>
+        
+        <div class="form-group">
+          <label>
+            <input 
+              type="checkbox" 
+              @change=${this._entityChanged}
+              .checked=${this.config.always_show_lyrics || false}
+              name="always_show_lyrics"
+            />
+            总是显示歌词（勾选时一直显示歌词）
+          </label>
         </div>
       </div>
     `;
@@ -129,14 +141,14 @@ class MusicPlayerEditor extends LitElement {
     
     // 对于width字段，如果为空则使用默认值100%
     // 对于height字段，如果为空则使用默认值80px
-    // 对于lyrics_height字段，如果为空则使用默认值220px
+    // 对于lyrics_height字段，如果为空则使用默认值18px
     let finalValue = value;
     if (name === 'width') {
       finalValue = value || '100%';
     } else if (name === 'height') {
       finalValue = value || '80px';
     } else if (name === 'lyrics_height') {
-      finalValue = value || '220px';
+      finalValue = value || '200px';
     }
     
     this.config = {
@@ -155,64 +167,7 @@ class MusicPlayerEditor extends LitElement {
     this.config = config;
   }
 }
-
 customElements.define('xiaoshi-music-player-editor', MusicPlayerEditor);
-
-window.customCardEditors = window.customCardEditors || {};
-window.customCardEditors["xiaoshi-music-player"] = {
-  config: {
-    name: "音乐播放器",
-    description: "一个功能完整的音乐播放器控制卡片",
-    tag: "xiaoshi-music-player",
-    image: "/static/images/dummy.png",
-    docs: "https://github.com/xiaoshi930/netease_lyrics",
-    config_schema: {
-      type: "object",
-      properties: {
-        xiaomi_home: {
-          title: "小米Home实体（主要控制实体）",
-          type: "string",
-          selector: {
-            entity: {
-              domain: "media_player"
-            }
-          }
-        },
-        xiaomi_miot: {
-          title: "小米Miot实体（备用实体）",
-          type: "string",
-          selector: {
-            entity: {
-              domain: "media_player"
-            }
-          }
-        },
-        theme: {
-          title: "主题",
-          type: "string",
-          default: "on",
-          enum: ["on", "off"],
-          enumNames: ["浅色主题（白底黑字）", "深色主题（深灰底白字）"]
-        },
-        width: {
-          title: "宽度",
-          type: "string",
-          default: "100%"
-        },
-        height: {
-          title: "高度",
-          type: "string",
-          default: "80px"
-        },
-        lyrics_height: {
-          title: "歌词高度",
-          type: "string",
-          default: "220px"
-        }
-      }
-    }
-  }
-};
 
 class MusicPlayer extends LitElement {
   static get properties() {
@@ -229,6 +184,7 @@ class MusicPlayer extends LitElement {
       width: { type: String },
       height: { type: String },
       lyricsHeight: { type: String },
+      alwaysShowLyrics: { type: Boolean },
       showLyrics: { type: Boolean },
       lyrics: { type: Array },
       currentLyricIndex: { type: Number },
@@ -349,7 +305,7 @@ class MusicPlayer extends LitElement {
         font-size: 25px;
         transition: all 0.2s;
         --mdc-ripple-press-opacity: 0;
-        --mdc-icon-size: 25px;
+        --mdc-icon-size: 20px;
         padding: 0;
       }
 
@@ -639,6 +595,81 @@ class MusicPlayer extends LitElement {
     `;
   }
 
+
+  constructor() {
+    super();
+    this._hass = null;
+    this._config = {};
+    this.xiaomiHomeEntity = '';
+    this.xiaomiMiotEntity = '';
+    this.xiaomiHomeState = {
+      state: 'idle',
+      attributes: {
+        friendly_name: '音乐播放器',
+        media_title: '未播放',
+        media_artist: '',
+        entity_picture: '',
+        media_duration: 0,
+        media_position: 0,
+        volume_level: 0.5
+      }
+    };
+    this.xiaomiMiotState = {
+      attributes: {
+        entity_picture: ''
+      }
+    };
+    this.volumeState = 20;
+    this.isPlaying = false;
+    this.volumeDebounceTimer = null;
+    this.isDragging = false;
+    this.localVolumeUpdate = false;
+    this.theme = 'on';
+    this.width = '100%';
+    this.height = '80px';
+    this.lyricsHeight = '200px';
+    this.alwaysShowLyrics = false;
+    this.showLyrics = false;
+    this.lyrics = [];
+    this.currentLyricIndex = -1;
+    this.lyricProgress = 0;
+    this.lyricsTimer = null;
+    this.lyricsCache = new Map();
+    // 平滑进度相关
+    this.smoothCurrentTime = 0;
+    this.lastUpdateTime = 0;
+    this.lastSyncSecond = -1;
+    this.smoothTimer = null;
+    // 播放状态跟踪
+    this.wasPlaying = false;
+    // 歌词调整弹窗状态
+    this.adjustmentToast = {
+      show: false,
+      message: '',
+      timer: null
+    };
+    // 歌词时间调节状态
+    this.lyricsTimeAdjustment = 0; // 总调节时间（毫秒）
+    this._initLyricsCache();
+  }
+
+  _evaluateTheme() {
+    try {
+      if (!this._config || !this._config.theme) return 'on';
+      if (typeof this._config.theme === 'function') {
+          return this._config.theme();
+      }
+      if (typeof this._config.theme === 'string' && 
+              (this._config.theme.includes('return') || this._config.theme.includes('=>'))) {
+          return (new Function(`return ${this._config.theme}`))();
+      }
+      return this._config.theme;
+    } catch(e) {
+      console.error('计算主题时出错:', e);
+      return 'on';
+    }
+  }
+
   _initLyricsCache() {
     try {
       const cached = localStorage.getItem("music_player_lyrics_cache");
@@ -695,80 +726,7 @@ class MusicPlayer extends LitElement {
     
     return false; // 歌曲未变化
   }
-
-  constructor() {
-    super();
-    this._hass = null;
-    this._config = {};
-    this.xiaomiHomeEntity = '';
-    this.xiaomiMiotEntity = '';
-    this.xiaomiHomeState = {
-      state: 'idle',
-      attributes: {
-        friendly_name: '音乐播放器',
-        media_title: '未播放',
-        media_artist: '',
-        entity_picture: '',
-        media_duration: 0,
-        media_position: 0,
-        volume_level: 0.5
-      }
-    };
-    this.xiaomiMiotState = {
-      attributes: {
-        entity_picture: ''
-      }
-    };
-    this.volumeState = 20;
-    this.isPlaying = false;
-    this.volumeDebounceTimer = null;
-    this.isDragging = false;
-    this.localVolumeUpdate = false;
-    this.theme = 'on';
-    this.width = '100%';
-    this.height = '80px';
-    this.lyricsHeight = '220px';
-    this.showLyrics = false;
-    this.lyrics = [];
-    this.currentLyricIndex = -1;
-    this.lyricProgress = 0;
-    this.lyricsTimer = null;
-    this.lyricsCache = new Map();
-    // 平滑进度相关
-    this.smoothCurrentTime = 0;
-    this.lastUpdateTime = 0;
-    this.lastSyncSecond = -1;
-    this.smoothTimer = null;
-    // 播放状态跟踪
-    this.wasPlaying = false;
-    // 歌词调整弹窗状态
-    this.adjustmentToast = {
-      show: false,
-      message: '',
-      timer: null
-    };
-    // 歌词时间调节状态
-    this.lyricsTimeAdjustment = 0; // 总调节时间（毫秒）
-    this._initLyricsCache();
-  }
-
-  _evaluateTheme() {
-    try {
-      if (!this._config || !this._config.theme) return 'on';
-      if (typeof this._config.theme === 'function') {
-          return this._config.theme();
-      }
-      if (typeof this._config.theme === 'string' && 
-              (this._config.theme.includes('return') || this._config.theme.includes('=>'))) {
-          return (new Function(`return ${this._config.theme}`))();
-      }
-      return this._config.theme;
-    } catch(e) {
-      console.error('计算主题时出错:', e);
-      return 'on';
-    }
-  }
-
+  
   disconnectedCallback() {
     super.disconnectedCallback();
     // 清理防抖定时器
@@ -814,7 +772,12 @@ class MusicPlayer extends LitElement {
     
     // 确保lyrics_height有默认值
     if (this._config.lyrics_height === undefined) {
-      this._config.lyrics_height = '220px';
+      this._config.lyrics_height = '200px';
+    }
+    
+    // 确保always_show_lyrics有默认值
+    if (this._config.always_show_lyrics === undefined) {
+      this._config.always_show_lyrics = false;
     }
     
     this.xiaomiHomeEntity = this._config.xiaomi_home;
@@ -822,6 +785,7 @@ class MusicPlayer extends LitElement {
     this.width = this._config.width;
     this.height = this._config.height;
     this.lyricsHeight = this._config.lyrics_height;
+    this.alwaysShowLyrics = this._config.always_show_lyrics;
     
     // 触发重新渲染以应用主题更改
     this.requestUpdate();
@@ -830,63 +794,87 @@ class MusicPlayer extends LitElement {
   set hass(hass) {
     this._hass = hass;
     
-    // 更新小米Home实体状态（优先使用）
+    let usePrimaryEntity = true;
+    let primaryState = null;
+    let backupState = null;
+    
+    // 获取主实体和备用实体状态
     if (hass && this.xiaomiHomeEntity) {
-      const xiaomiHomeState = hass.states[this.xiaomiHomeEntity];
-      if (xiaomiHomeState) {
-        this.xiaomiHomeState = xiaomiHomeState;
-        this.isPlaying = ['playing', 'Playing', '播放', '播放中', '正在播放'].includes(xiaomiHomeState.state);
-        // 只有在非本地更新时才从主实体获取音量
-        if (!this.localVolumeUpdate && xiaomiHomeState.attributes && xiaomiHomeState.attributes.volume_level !== undefined) {
-          this.volumeState = Math.round((xiaomiHomeState.attributes.volume_level || 0) * 100);
-        }
-        // 更新进度信息
-        this.requestUpdate(); 
-        
-        // 检测歌曲切换并更新歌词
-        const songChanged = this._checkSongChange(xiaomiHomeState);
-        
-        // 如果歌曲发生变化或开始播放，重新初始化时间进度（只获取一次实体进度）
-        if (songChanged && this.isPlaying && this.showLyrics && this.lyrics.length > 0) {
-          this.initSmoothTimeOnce();
-        }
-        
-        // 更新歌词定时器状态
-        if (this.showLyrics) {
-          this.startLyricsTimer();
-        }
+      primaryState = hass.states[this.xiaomiHomeEntity];
+    }
+    
+    if (hass && this.xiaomiMiotEntity) {
+      backupState = hass.states[this.xiaomiMiotEntity];
+    }
+    
+    // 判断是否使用备用实体：主实体不存在或状态为unavailable
+    if (!primaryState || primaryState.state === 'unavailable') {
+      usePrimaryEntity = false;
+    }
+    
+    // 更新状态
+    if (usePrimaryEntity && primaryState) {
+      // 使用主实体
+      this.xiaomiHomeState = primaryState;
+      this.isPlaying = ['playing', 'Playing', '播放', '播放中', '正在播放'].includes(primaryState.state);
+      
+      // 只有在非本地更新时才从主实体获取音量
+      if (!this.localVolumeUpdate && primaryState.attributes && primaryState.attributes.volume_level !== undefined) {
+        this.volumeState = Math.round((primaryState.attributes.volume_level || 0) * 100);
+      }
+      
+      // 检测歌曲切换并更新歌词
+      const songChanged = this._checkSongChange(primaryState);
+      
+      // 如果歌曲发生变化或开始播放，重新初始化时间进度
+      if (songChanged && this.isPlaying && this.showLyrics && this.lyrics.length > 0) {
+        this.initSmoothTimeOnce();
+      }
+      
+    } else if (backupState) {
+      // 使用备用实体
+      this.xiaomiMiotState = backupState;
+      this.isPlaying = ['playing', 'Playing', '播放', '播放中', '正在播放'].includes(backupState.state);
+      
+      // 从备用实体获取音量
+      if (!this.localVolumeUpdate && backupState.attributes && backupState.attributes.volume_level !== undefined) {
+        this.volumeState = Math.round((backupState.attributes.volume_level || 0) * 100);
+      }
+      
+      // 检测歌曲切换并更新歌词
+      const songChanged = this._checkSongChange(backupState);
+      
+      // 如果歌曲发生变化，重新初始化时间进度
+      if (songChanged && this.isPlaying && this.showLyrics && this.lyrics.length > 0) {
+        this.initSmoothTimeOnce();
       }
     }
     
-    // 更新小米Miot实体状态（备用）
-    if (hass && this.xiaomiMiotEntity) {
-      const xiaomiMiotState = hass.states[this.xiaomiMiotEntity];
-      if (xiaomiMiotState) {
-        this.xiaomiMiotState = xiaomiMiotState;
-        // 如果主实体没有播放状态，检查备用实体的播放状态
-        if (!this.isPlaying && xiaomiMiotState.state) {
-          this.isPlaying = ['playing', 'Playing', '播放', '播放中', '正在播放'].includes(xiaomiMiotState.state);
-        }
-        // 只有在没有主实体且非本地更新时，才从备用实体获取音量
-        if (!this.xiaomiHomeEntity && !this.localVolumeUpdate && xiaomiMiotState.attributes && xiaomiMiotState.attributes.volume_level !== undefined) {
-          this.volumeState = Math.round((xiaomiMiotState.attributes.volume_level || 0) * 100);
-        }
-        // 更新进度信息（无论主实体是否存在都要更新）
-        this.requestUpdate();
-        
-        // 检测歌曲切换并更新歌词
-        const songChanged = this._checkSongChange(xiaomiMiotState);
-        
-        // 如果歌曲发生变化，重新初始化时间进度
-        if (songChanged && this.isPlaying && this.showLyrics && this.lyrics.length > 0) {
-          this.initSmoothTimeOnce();
-        }
-        
-        // 更新歌词定时器状态
-        if (this.showLyrics) {
-          this.startLyricsTimer();
-        }
+    // 更新备用实体状态（用于显示目的，但不用于主要控制）
+    if (backupState && usePrimaryEntity) {
+      this.xiaomiMiotState = backupState;
+    }
+    
+    // 更新主实体状态（用于显示目的，当使用备用实体时）
+    if (primaryState && !usePrimaryEntity) {
+      this.xiaomiHomeState = primaryState;
+    }
+    
+    // 更新进度信息
+    this.requestUpdate();
+    
+    // 如果启用了"总是显示歌词"且当前未显示歌词，则自动显示
+    if (this.alwaysShowLyrics && !this.showLyrics) {
+      this.showLyrics = true;
+      // 首次自动显示歌词时尝试加载真实歌词
+      if (this.lyrics.length === 0) {
+        this.loadLyricsForCurrentSong();
       }
+    }
+    
+    // 更新歌词定时器状态
+    if (this.showLyrics) {
+      this.startLyricsTimer();
     }
     
     // 重置本地更新标志
@@ -920,7 +908,8 @@ class MusicPlayer extends LitElement {
       theme: "on",
       width: "100%",
       height: "80px",
-      lyrics_height: "220px"
+      lyrics_height: "200px",
+      always_show_lyrics: false
     };
   }
 
@@ -1013,6 +1002,12 @@ class MusicPlayer extends LitElement {
 
   handleLyricsToggle() {
     this.handleClick();
+    
+    // 如果启用了"总是显示歌词"，则不允许关闭歌词
+    if (this.alwaysShowLyrics) {
+      return;
+    }
+    
     this.showLyrics = !this.showLyrics;
     
     // 打开歌词时，重新获取实体中的当前进度
@@ -1655,34 +1650,38 @@ class MusicPlayer extends LitElement {
   }
 
   getProgressPercentage() {
-    // 检查主实体是否有进度数据，如果没有则使用备用实体
+    // 使用与set hass相同的智能实体选择逻辑
     let primaryState = null;
+    let usePrimaryEntity = true;
     
-    // 首先检查主实体是否有有效的进度数据
-    if (this.xiaomiHomeState && this.xiaomiHomeState.attributes) {
-      const homeAttrs = this.xiaomiHomeState.attributes;
-      const homeDuration = homeAttrs.media_duration || homeAttrs.duration || 0;
-      
-      if (parseFloat(homeDuration) > 0) {
-        primaryState = this.xiaomiHomeState;
-      }
+    // 获取主实体状态
+    if (this.xiaomiHomeEntity && this._hass) {
+      primaryState = this._hass.states[this.xiaomiHomeEntity];
     }
     
-    // 如果主实体没有有效进度数据，检查备用实体
-    if (!primaryState && this.xiaomiMiotState && this.xiaomiMiotState.attributes) {
-      const miotAttrs = this.xiaomiMiotState.attributes;
-      const miotDuration = miotAttrs.media_duration || miotAttrs.duration || 0;
-      
-      if (parseFloat(miotDuration) > 0) {
-        primaryState = this.xiaomiMiotState;
-      }
+    // 判断是否使用备用实体：主实体不存在或状态为unavailable
+    if (!primaryState || primaryState.state === 'unavailable') {
+      usePrimaryEntity = false;
     }
     
-    if (!primaryState || !primaryState.attributes) {
+    // 选择要显示的实体状态
+    let displayState = null;
+    if (usePrimaryEntity && primaryState) {
+      displayState = primaryState;
+    } else if (this.xiaomiMiotEntity && this._hass) {
+      displayState = this._hass.states[this.xiaomiMiotEntity];
+    }
+    
+    // 如果都没有，使用本地状态
+    if (!displayState) {
+      displayState = this.xiaomiHomeState || this.xiaomiMiotState;
+    }
+    
+    if (!displayState || !displayState.attributes) {
       return 0;
     }
     
-    const attributes = primaryState.attributes;
+    const attributes = displayState.attributes;
     const media_duration = attributes.media_duration || attributes.duration || 0;
     const media_position = attributes.media_position || attributes.position || 0;
     
@@ -1698,9 +1697,34 @@ class MusicPlayer extends LitElement {
   }
 
   getStateText() {
-    // 优先使用小米Home实体的状态
-    const primaryState = this.xiaomiHomeState || this.xiaomiMiotState;
-    const state = primaryState?.state || 'idle';
+    // 使用与set hass相同的智能实体选择逻辑
+    let primaryState = null;
+    let usePrimaryEntity = true;
+    
+    // 获取主实体状态
+    if (this.xiaomiHomeEntity && this._hass) {
+      primaryState = this._hass.states[this.xiaomiHomeEntity];
+    }
+    
+    // 判断是否使用备用实体：主实体不存在或状态为unavailable
+    if (!primaryState || primaryState.state === 'unavailable') {
+      usePrimaryEntity = false;
+    }
+    
+    // 选择要显示的实体状态
+    let displayState = null;
+    if (usePrimaryEntity && primaryState) {
+      displayState = primaryState;
+    } else if (this.xiaomiMiotEntity && this._hass) {
+      displayState = this._hass.states[this.xiaomiMiotEntity];
+    }
+    
+    // 如果都没有，使用本地状态
+    if (!displayState) {
+      displayState = this.xiaomiHomeState || this.xiaomiMiotState;
+    }
+    
+    const state = displayState?.state || 'idle';
     if (['播放', '播放中', '正在播放', 'playing', 'Playing'].includes(state)) {
       return '正在播放';
     }
@@ -1721,13 +1745,54 @@ class MusicPlayer extends LitElement {
     const fgColor = theme === 'on' ? 'rgb(0, 0, 0)' : 'rgb(255, 255, 255)';
     const bgColor = theme === 'on' ? 'rgb(255, 255, 255)' : 'rgb(50, 50, 50)';
     
-    // 获取主要状态实体（优先使用小米Home）
-    const primaryState = this.xiaomiHomeState || this.xiaomiMiotState;
-    const attributes = primaryState?.attributes || {};
+    // 智能选择背景图片的实体状态
+    let primaryState = null;
+    let backupState = null;
+    let displayState = null;
     
-    // 获取图片URL：优先使用小米Home实体的图片，否则使用小米Miot实体的图片
-    const entityPicture = this.xiaomiHomeState?.attributes?.entity_picture || 
-                       this.xiaomiMiotState?.attributes?.entity_picture || '';
+    // 获取主实体和备用实体状态
+    if (this.xiaomiHomeEntity && this._hass) {
+      primaryState = this._hass.states[this.xiaomiHomeEntity];
+    }
+    if (this.xiaomiMiotEntity && this._hass) {
+      backupState = this._hass.states[this.xiaomiMiotEntity];
+    }
+    
+    // 智能选择逻辑：优先选择有图片的实体
+    if (primaryState && backupState) {
+      const primaryPicture = primaryState.attributes?.entity_picture;
+      const backupPicture = backupState.attributes?.entity_picture;
+      
+      if (primaryPicture && !backupPicture) {
+        // 主实体有图片，备用实体无图片，使用主实体
+        displayState = primaryState;
+      } else if (!primaryPicture && backupPicture) {
+        // 主实体无图片，备用实体有图片，使用备用实体
+        displayState = backupState;
+      } else if (primaryPicture && backupPicture) {
+        // 两个实体都有图片，优先使用主实体
+        displayState = primaryState;
+      } else {
+        // 两个实体都没有图片，按原有逻辑选择（优先主实体）
+        displayState = primaryState.state === 'unavailable' ? backupState : primaryState;
+      }
+    } else if (primaryState) {
+      // 只有主实体存在
+      displayState = primaryState;
+    } else if (backupState) {
+      // 只有备用实体存在
+      displayState = backupState;
+    }
+    
+    // 如果都没有，使用本地状态
+    if (!displayState) {
+      displayState = this.xiaomiHomeState || this.xiaomiMiotState;
+    }
+    
+    const attributes = displayState?.attributes || {};
+    
+    // 获取图片URL：使用智能选择的实体图片
+    const entityPicture = displayState?.attributes?.entity_picture || '';
     
     return html`
       <style>
@@ -1811,6 +1876,7 @@ class MusicPlayer extends LitElement {
             <div 
               class="player-icon ${this.isPlaying ? 'playing' : ''}"
               style="background-image: url('${entityPicture}')"
+              title="${displayState?.attributes?.friendly_name || '音乐播放器'}"
             ></div>
           ` : html`
             <ha-icon 
@@ -1830,7 +1896,7 @@ class MusicPlayer extends LitElement {
         <!-- 信息区域 -->
         <div class="info-area">
           <div class="info-label">
-            ${(this.xiaomiHomeState?.attributes?.media_title || this.xiaomiMiotState?.attributes?.media_title) || '未播放'}  ${(this.xiaomiHomeState?.attributes?.media_artist || this.xiaomiMiotState?.attributes?.media_artist) || ''}
+            ${attributes.media_title || '未播放'}  ${attributes.media_artist || ''}
           </div>
         </div>
 
@@ -1885,8 +1951,14 @@ class MusicPlayer extends LitElement {
           <ha-icon icon="mdi:skip-next"></ha-icon>
         </button>
 
-        <button class="control-button lyrics-button" @click=${this.handleLyricsToggle}>
-          ${this.showLyrics ? '关闭歌词' : '打开歌词'}
+        <button 
+          class="control-button lyrics-button" 
+          @click=${this.handleLyricsToggle}
+          ?disabled=${this.alwaysShowLyrics}
+          style=${this.alwaysShowLyrics ? 'opacity: 0.5; cursor: not-allowed;' : ''}
+          title=${this.alwaysShowLyrics ? '已启用"总是显示歌词"，歌词无法关闭' : (this.showLyrics ? '关闭歌词' : '打开歌词')}
+        >
+          ${this.alwaysShowLyrics ? '歌词已锁定' : (this.showLyrics ? '关闭歌词' : '打开歌词')}
         </button>
       </div>
 
