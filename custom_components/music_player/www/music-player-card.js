@@ -1731,8 +1731,11 @@ class MusicPlayer extends LitElement {
     if (['暂停', 'paused', 'Paused'].includes(state)) {
       return '暂停';
     }
-    if (['idle', '空闲'].includes(state)) {
+    if (['idle', '空闲','unknown'].includes(state)) {
       return '空闲';
+    }
+    if (['off'].includes(state)) {
+      return '关闭';
     }
     return state;
   }
