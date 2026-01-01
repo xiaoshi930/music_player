@@ -1,4 +1,4 @@
-console.info("%c 音乐播放器 \n%c   v 2.4   ", "color: red; font-weight: bold; background: black", "color: white; font-weight: bold; background: black");
+console.info("%c 音乐播放器 \n%c   v 2.5   ", "color: red; font-weight: bold; background: black", "color: white; font-weight: bold; background: black");
 import { LitElement, html, css } from "https://unpkg.com/lit-element@2.4.0/lit-element.js?module";
 
 class MusicPlayerEditor extends LitElement {
@@ -2027,6 +2027,7 @@ window.customCards.push({
   preview: true,
   documentationURL: "https://github.com/xiaoshi930/music_player"
 });
+
 
 
 
